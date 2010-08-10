@@ -1,9 +1,46 @@
-﻿(provide 'desktop-auto-save)
+﻿;; desktop-autosave.el: An emacs package to automatically save desktop sessions
+;; Copyright 2010 Victor Chudnovsky
+;;
+;; Author:  victor.chudnovsky+desktop-autosave@gmail.com
+;;
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 2, or (at your option)
+;; any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+;;
+;; You should have received a copy of the GNU General Public License
+;; along with this program; if not, write to the Free Software
+;; Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+;;
+;; Description:
+;;
+;; This emacs package will cause the emacs desktop session to be saved
+;; to file periodically (when emacs autosaves) as well as whenever
+;; significant events occur such as opening or saving a file.
+;;
+;; Usage:
+;;  M-x desktop-autosave-start RET <desktop name>
+;;  M-x desktop-autosave-stop
+;;
+;; Main e-lisp functions:
+;; (desktop-autosave-start (&optional desktop-name force-proceed)
+;; (desktop-autosave-stop &optional save)
+;; (desktop-autosave-currently-saving)
+;;
+;; The code below is based loosely on Joseph Brenner's "Desktop
+;; Recover" package (http://www.emacswiki.org/emacs/DesktopRecover).
+
+(provide 'desktop-autosave)
 (require 'desktop)
 
 ;;; Configuration variables
 
-; TODO(vchudnov): Make this location be read from an environment
+; TODO: Make this location be read from an environment
 ; variable and then default to this if not set.
 (defvar desktop-autosave-desktop-repository
   (format "/home/%s/.emacs.d/desktop-sessions" (user-login-name))
@@ -26,7 +63,7 @@
 (defvar desktop-autosave-desktop-name "desktop-autosave"
   "Current desktop session name")
 
-; TODO(vchudnov): Make this history work.
+; TODO: Make this history work.
 (defvar desktop-autosave-desktop-name-hist '(desktop-autosave-desktop-name)
   "Desktop session name history")
 
@@ -41,7 +78,7 @@
   (add-hook 'after-save-hook 'desktop-autosave-save-desktop)
   (add-hook 'find-file-hook 'desktop-autosave-save-desktop)
   (add-hook 'kill-emacs-hook 'desktop-autosave-clean-up-for-exit)
-  ; TODO(vchudnov): This causes an infinite loop:
+  ; TODO: This causes an infinite loop:
   ;  (add-hook 'kill-buffer-hook 'desktop-autosave-handle-kill-file)
   (desktop-autosave-save-desktop)
   )
@@ -74,8 +111,7 @@
   "For doing a 'clean' exit.
    Intended to be attached to the kill-emacs-hook.
    Saves the desktop and stops desktop-autosave."
-  (desktop-autosave-save-desktop)
-  (desktop-autosave-stop-automatic-saves))
+  (desktop-autosave-stop t))
 
 (defun desktop-autosave-handle-auto-save ()
   "Takes the appropriate action if the auto-save-hook fires.
@@ -87,10 +123,10 @@
         (t
          (setq desktop-autosave-auto-save-count (+ 1 desktop-autosave-auto-save-count)))))
 
-; TODO(vchudnov) This leads to an infinite loop! Figure out why
+; TODO: This leads to an infinite loop! Figure out why
 (defun desktop-autosave-handle-kill-file ()
   "Updates the desktop when a buffer is killed.
-  TODO(vchudnov): Currently, this leads to an infinite loop if
+  TODO: Currently, this leads to an infinite loop if
   involed as a handler. Figure out why."
   (message "kill file handler")
   (run-at-time "1 sec" nil 'desktop-autosave-save-desktop))
@@ -168,7 +204,7 @@
   (setq desktop-autosave-directory-name
 	(desktop-autosave-fixdir (concat (file-name-as-directory directory)
 					 name)))
- ; TODO(vchudnov) merge this with the other setq desktop-dirname
+ ; TODO: merge this with the other setq desktop-dirname
   (setq desktop-dirname desktop-autosave-directory-name))
 
 (defun desktop-autosave-clear-location ()
@@ -195,23 +231,23 @@
 	(if (or force-proceed
 		(if lock-exists
 		    (yes-or-no-p "Desktop is locked, due to either being in use or a crashed session. Continue? ")
-		  (y-or-n-p "Recover previously saved desktop? "))))
-      (progn
-	(if (not desktop-autosave-merge-desktop)
+		  (y-or-n-p "Recover previously saved desktop? ")))
 	    (progn
-	      (message "Overwriting current desktop with new desktop %s" desktop-autosave-directory-name)
-	      (desktop-clear))
-	    (message "Merging current buffers into new desktop %s" desktop-autosave-directory-name))  
-	(custom-set-variables '(desktop-load-locked-desktop t))
-	(desktop-read desktop-autosave-directory-name)
-	t)
-      nil)
-    t))
+	      (if (not desktop-autosave-merge-desktop)
+		  (progn
+		    (message "Overwriting current desktop with new desktop %s" desktop-autosave-directory-name)
+		    (desktop-clear))
+		(message "Merging current buffers into new desktop %s" desktop-autosave-directory-name))  
+	      (custom-set-variables '(desktop-load-locked-desktop t))
+	      (desktop-read desktop-autosave-directory-name)
+	      t)
+	  nil)
+      t)))
 
 (defun desktop-autosave-show ()
   "Shows the desktop repositories that are found on disk."
   (interactive)
-  ; TODO(vchudnov): Handle the case where the directory whose name is
+  ; TODO: Handle the case where the directory whose name is
   ; in desktop-autosave-desktop-repository does not exist.
   (let ((alldesktops (directory-files desktop-autosave-desktop-repository nil  ".*/desktop\.el")))
     (dolist (desktop alldesktops nil)
@@ -247,9 +283,11 @@
 	    (if (desktop-autosave-load-desktop force-proceed)
 		(desktop-autosave-do-saves-automatically)))))
 
-(defun desktop-autosave-stop ()
+(defun desktop-autosave-stop (&optional save)
   "Stops desktop-autosave."
   (interactive)
+  (if save
+      (desktop-autosave-save-desktop))
   (desktop-autosave-stop-automatic-saves))
 
 
