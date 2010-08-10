@@ -28,9 +28,14 @@
 ;;  M-x desktop-autosave-stop
 ;;
 ;; Main e-lisp functions:
-;; (desktop-autosave-start (&optional desktop-name force-proceed)
-;; (desktop-autosave-stop &optional save)
-;; (desktop-autosave-currently-saving)
+;;  (desktop-autosave-start (&optional desktop-name force-proceed)
+;;  (desktop-autosave-stop &optional save)
+;;  (desktop-autosave-currently-saving)
+;;
+;; You may also want to customize in your ~/.emacs what global
+;; settings get saved with the desktop. See
+;; http://www.xsteve.at/prg/emacs/power-user-tips.html for
+;; suggestions.
 ;;
 ;; The code below is based loosely on Joseph Brenner's "Desktop
 ;; Recover" package (http://www.emacswiki.org/emacs/DesktopRecover).
