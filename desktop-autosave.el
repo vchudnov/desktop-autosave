@@ -32,6 +32,10 @@
 ;;  (desktop-autosave-stop &optional save)
 ;;  (desktop-autosave-currently-saving)
 ;;
+;; You probably want to include this functionality in your ~/.emacs as follows:
+;;  (setq load-path (cons "<path to this file>" load-path))
+;;  (require 'desktop-autosave)
+;;
 ;; You may also want to customize in your ~/.emacs what global
 ;; settings get saved with the desktop. See
 ;; http://www.xsteve.at/prg/emacs/power-user-tips.html for
