@@ -1,0 +1,51 @@
+desktop-auto-save  An emacs package to automatically save desktop sessions
+Copyright 2010 Victor Chudnovsky
+
+Description:
+
+This emacs package will cause the emacs desktop session to be saved
+to file periodically (when emacs autosaves) as well as whenever
+significant events occur such as opening or saving a file.
+
+Usage:
+ Starting desktop-autosave:
+   M-x desktop-autosave-start RET <desktop name>
+ Stopping desktop-autosave:
+   M-x desktop-autosave-stop
+ Showing previously-saved desktops:
+   M-x desktop-autosave-show
+ Deleting a previously-saved desktop:
+   M-x desktop-autosave-delete-desktop RET <desktop name> RET <confirm> RET
+
+Main e-lisp functions:
+ (desktop-autosave-start (&optional desktop-name force-proceed)
+ (desktop-autosave-stop &optional save)
+ (desktop-autosave-currently-saving)
+ (desktop-autosave-show)
+ (desktop-autosave-delete-desktop (&optional name)
+
+You probably want to include this functionality in your ~/.emacs as follows:
+ (setq load-path (cons "<path to this file>" load-path))
+ (require 'desktop-autosave)
+
+You may also want to customize in your ~/.emacs what global
+settings get saved with the desktop. See
+http://www.xsteve.at/prg/emacs/power-user-tips.html for
+suggestions.
+
+Configuration:
+  EMACS_DESKTOP_REPOSITORY Environment variable that, if present and
+  not empty, determines the directory where the desktops are saved. If
+  not present, defaults to /home/$USER/.emacs.d/desktop-sessions
+
+The code below is based loosely on Joseph Brenner's "Desktop
+Recover" package (http://www.emacswiki.org/emacs/DesktopRecover).
+
+Known issues:
+* Saving on the desktop when exiting emacs leads to an infinite loop
+  and is currently disabled. This should not affect the effectiveness
+  of this package, since there are plenty of other places where the
+  desktop is saved.
+
+Enhancements under consideration:
+* Saving frame configurations along with the desktop

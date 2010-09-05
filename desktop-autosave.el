@@ -24,13 +24,21 @@
 ;; significant events occur such as opening or saving a file.
 ;;
 ;; Usage:
-;;  M-x desktop-autosave-start RET <desktop name>
-;;  M-x desktop-autosave-stop
+;;  Starting desktop-autosave:
+;;    M-x desktop-autosave-start RET <desktop name>
+;;  Stopping desktop-autosave:
+;;    M-x desktop-autosave-stop
+;;  Showing previously-saved desktops:
+;;    M-x desktop-autosave-show
+;;  Deleting a previously-saved desktop:
+;;    M-x desktop-autosave-delete-desktop RET <desktop name> RET <confirm> RET
 ;;
 ;; Main e-lisp functions:
 ;;  (desktop-autosave-start (&optional desktop-name force-proceed)
 ;;  (desktop-autosave-stop &optional save)
 ;;  (desktop-autosave-currently-saving)
+;;  (desktop-autosave-show)
+;;  (desktop-autosave-delete-desktop (&optional name)
 ;;
 ;; You probably want to include this functionality in your ~/.emacs as follows:
 ;;  (setq load-path (cons "<path to this file>" load-path))
@@ -41,19 +49,36 @@
 ;; http://www.xsteve.at/prg/emacs/power-user-tips.html for
 ;; suggestions.
 ;;
+;; Configuration:
+;;   EMACS_DESKTOP_REPOSITORY Environment variable that, if present and
+;;   not empty, determines the directory where the desktops are saved. If
+;;   not present, defaults to /home/$USER/.emacs.d/desktop-sessions
+;;
 ;; The code below is based loosely on Joseph Brenner's "Desktop
 ;; Recover" package (http://www.emacswiki.org/emacs/DesktopRecover).
+;;
+;; Known issues:
+;; * Saving on the desktop when exiting emacs leads to an infinite loop
+;;   and is currently disabled. This should not affect the effectiveness
+;;   of this package, since there are plenty of other places where the
+;;   desktop is saved.
+;;
+;; Enhancements under consideration:
+;; * Saving frame configurations along with the desktop
 
 (provide 'desktop-autosave)
 (require 'desktop)
 
 ;;; Configuration variables
 
-; TODO: Make this location be read from an environment
-; variable and then default to this if not set.
 (defvar desktop-autosave-desktop-repository
-  (format "/home/%s/.emacs.d/desktop-sessions" (user-login-name))
-  "Directory where the desktop session directories are saved")
+  (let ((repository-from-env (getenv "EMACS_DESKTOP_REPOSITORY")))
+    (if (and repository-from-env
+	     (> (length repository-from-env) 0))
+	repository-from-env
+      (format "/home/%s/.emacs.d/desktop-sessions" (user-login-name))))
+  "Repository (directory) where the desktop session directories
+  are saved")
 
 (defvar desktop-autosave-directory-name nil
   "Directory for auto-saving the current desktop session")
@@ -63,19 +88,26 @@
 
 (defvar desktop-autosave-merge-desktop nil
   "Whether to merge the recovered desktop into the currently
-  opened desktop (not needed if you set up desktop-autosave before opening files)")
-
-
+  opened desktop (not needed if you start desktop-autosave
+  before opening files)")
 
 ;;; Desktop name and name history
 
 (defvar desktop-autosave-desktop-name "desktop-autosave"
   "Current desktop session name")
 
-; TODO: Make this history work.
-(defvar desktop-autosave-desktop-name-hist '(desktop-autosave-desktop-name)
+(defvar desktop-autosave-desktop-name-hist (list desktop-autosave-desktop-name)
   "Desktop session name history")
 
+;; Debugging
+
+(defvar desktop-autosave-debug-mode t
+  "Debug mode for desktop-autosave")
+
+(defun desktop-autosave-dbg (&rest args)
+  "Prints args if desktop-autosave is in debug mode."
+  (if desktop-autosave-debug-mode
+      (apply 'message args)))
 
 ;;;  The various autosave hooks
 
@@ -87,7 +119,7 @@
   (add-hook 'after-save-hook 'desktop-autosave-save-desktop)
   (add-hook 'find-file-hook 'desktop-autosave-save-desktop)
   (add-hook 'kill-emacs-hook 'desktop-autosave-clean-up-for-exit)
-  ; TODO: This causes an infinite loop:
+  ; TODO(vchudnov): This causes an infinite loop:
   ;  (add-hook 'kill-buffer-hook 'desktop-autosave-handle-kill-file)
   (desktop-autosave-save-desktop)
   )
@@ -102,7 +134,7 @@
   (remove-hook 'kill-emacs-hook 'desktop-autosave-clean-up-for-exit)
   (remove-hook 'after-save-hook 'desktop-autosave-save-desktop)
   (remove-hook 'find-file-hook 'desktop-autosave-save-desktop)
-  ; This was never set because of the infinite loop issue:
+  ; TODO(vchudnov): This was never set because of the infinite loop issue:
   ;  (remove-hook 'kill-buffer-hook 'desktop-autosave-handle-kill-file)
   )
 
@@ -120,7 +152,7 @@
   "For doing a 'clean' exit.
    Intended to be attached to the kill-emacs-hook.
    Saves the desktop and stops desktop-autosave."
-  (desktop-autosave-stop t))
+  (desktop-autosave-stop nil))
 
 (defun desktop-autosave-handle-auto-save ()
   "Takes the appropriate action if the auto-save-hook fires.
@@ -132,12 +164,10 @@
         (t
          (setq desktop-autosave-auto-save-count (+ 1 desktop-autosave-auto-save-count)))))
 
-; TODO: This leads to an infinite loop! Figure out why
+; TODO(vchudnov): This leads to an infinite loop! Figure out why
 (defun desktop-autosave-handle-kill-file ()
-  "Updates the desktop when a buffer is killed.
-  TODO: Currently, this leads to an infinite loop if
-  involed as a handler. Figure out why."
-  (message "kill file handler")
+  "Updates the desktop when a buffer is killed."
+  (desktop-autosave-dbg "kill file handler")
   (run-at-time "1 sec" nil 'desktop-autosave-save-desktop))
 
 
@@ -156,11 +186,11 @@
   (if (boundp 'desktop-release-lock)
       (desktop-release-lock)
     (progn
-      (message "Symbol not bound: desktop-release-lock")
+      (desktop-autosave-dbg "Symbol not bound: desktop-release-lock")
       (let ((file (desktop-full-lock-name desktop-autosave-directory-name)))
 	(when (file-exists-p file) (delete-file file))))))
 
-;;; Utilities for managing desktop-autosave operation
+;;; Helper functions for managing desktop-autosave operation
 
 (defun desktop-autosave-fixdir (location &optional root)
   "Fixes up the file directory LOCATION.
@@ -190,35 +220,39 @@
    semantics.)"
   (if desktop-autosave-directory-name
       (progn
-	(message "Currently saving session %s in %s"
+	(desktop-autosave-dbg "Currently saving session %s in %s"
 		 desktop-autosave-desktop-name
 		 desktop-autosave-directory-name)
 	desktop-autosave-desktop-name)
     (progn
-      (message "Not currently saving")
+      (desktop-autosave-dbg "Not currently saving")
       nil)))
 
 (defun desktop-autosave-get-desktop-name (prompt initial)
   "Prompts for the name of a desktop using the given prompt and
    initial suggested value for the name. Applies history to the
-   values entered here."
-  (read-string prompt initial desktop-autosave-desktop-name-hist initial nil))
+   values entered here. Supplies autocompletion, prompting for
+   confirmation if the name entered is not an autocompletion
+   item."
+  (completing-read prompt (desktop-autosave-get-session-names) nil
+		   'confirm initial 'desktop-autosave-desktop-name-hist))
 
+(defun desktop-autosave-get-directory-for-desktop (desktop-name)
+  "Returns the desktop directory name for a desktop called desktop-name."
+  (desktop-autosave-fixdir (concat (file-name-as-directory
+				    desktop-autosave-desktop-repository)
+				   desktop-name)))
 
-(defun desktop-autosave-set-location (directory name)
+(defun desktop-autosave-set-location (name)
   "Sets the location where the current desktop session is to be saved."
-  (message "desktop-autosave-set-location: name=%s directory= %s"
-	   name directory)
   (setq desktop-autosave-desktop-name name)
   (setq desktop-autosave-directory-name
-	(desktop-autosave-fixdir (concat (file-name-as-directory directory)
-					 name)))
- ; TODO: merge this with the other setq desktop-dirname
-  (setq desktop-dirname desktop-autosave-directory-name))
+	(desktop-autosave-get-directory-for-desktop name)))
 
 (defun desktop-autosave-clear-location ()
   "Clears the location of the current desktop session, thus implicitly
    indicating that desktop saves are turned off."
+  (setq desktop-autosave-desktop-name "")
   (setq desktop-autosave-directory-name nil))
 
 
@@ -227,10 +261,10 @@
   unless force-proceed is true. When loading, clears the current
   desktop beforehand if desktop-autosave-merge-desktop is
   false. If there is no previous desktop to load, does
-  nothing. Return a bool indicating whether the whole
+  nothing. Returns a bool indicating whether the whole
   desktop-autosave setup can continue (which is nil if the user
-  chose to cancel a confirmation prompt."
-  (message "In desktop-autosave-load-desktop")
+  chose to cancel a confirmation prompt)."
+  (desktop-autosave-dbg "In desktop-autosave-load-desktop")
   (let ((desktop-exists
 	 (file-exists-p (desktop-full-file-name desktop-autosave-directory-name)))
 	(lock-exists
@@ -239,28 +273,76 @@
     (if desktop-exists
 	(if (or force-proceed
 		(if lock-exists
-		    (yes-or-no-p "Desktop is locked, due to either being in use or a crashed session. Continue? ")
+		    (yes-or-no-p
+		     "Desktop is locked, due to either being in use or a crashed session. Continue? ")
 		  (y-or-n-p "Recover previously saved desktop? ")))
 	    (progn
 	      (if (not desktop-autosave-merge-desktop)
 		  (progn
-		    (message "Overwriting current desktop with new desktop %s" desktop-autosave-directory-name)
+		    (message "Overwriting current desktop with new desktop %s"
+			     desktop-autosave-directory-name)
 		    (desktop-clear))
-		(message "Merging current buffers into new desktop %s" desktop-autosave-directory-name))  
+		(message "Merging current buffers into new desktop %s"
+			 desktop-autosave-directory-name))  
 	      (custom-set-variables '(desktop-load-locked-desktop t))
 	      (desktop-read desktop-autosave-directory-name)
 	      t)
 	  nil)
       t)))
 
+(defun desktop-autosave-get-session-names (&optional name-prefix)
+  "Returns a list of all the desktops whose names start with name-prefix."
+  (let ((name-match-expr (concat desktop-autosave-desktop-repository "/" name-prefix "*")))
+    (condition-case nil
+	(let* ((suffix  "/.emacs.desktop")
+	       (all-desktops (file-expand-wildcards
+			      (concat name-match-expr suffix)))
+	       (prefix-length (+ 1 (length desktop-autosave-desktop-repository)))
+	       (suffix-length (length suffix))
+	       (result nil))
+	  (dolist (desktop all-desktops result)
+	    (setq result (cons (substring desktop prefix-length (- (length desktop) suffix-length))
+			       result))))
+      (error (progn
+	       (message "No desktops found matching %s" name-match-expr)
+	       nil)))))
+
+;; Top-level user-facing functions
+
 (defun desktop-autosave-show ()
-  "Shows the desktop repositories that are found on disk."
+  "Shows the desktops that are found on disk."
   (interactive)
-  ; TODO: Handle the case where the directory whose name is
-  ; in desktop-autosave-desktop-repository does not exist.
-  (let ((alldesktops (directory-files desktop-autosave-desktop-repository nil  ".*/desktop\.el")))
-    (dolist (desktop alldesktops nil)
-      (message "Repository: %s" desktop))))
+  (message 
+   (let ((result ""))
+     (dolist (desktop (desktop-autosave-get-session-names) result)
+       (setq result (concat result desktop " "))))))
+
+(defun desktop-autosave-delete-desktop (&optional name)
+  "Deletes the desktop directory <name>. If <name> is nil or not
+specified, asks for the desktop directory name. Never allows the
+current desktop session to be deleted. Always asks for
+confirmation before deletion. Returns t if a deletion was
+performed, or nil otherwise."
+  (interactive)
+  (if (not name)
+      (setq name
+	    (completing-read "Desktop to delete: " (desktop-autosave-get-session-names))))
+  (if (string= name desktop-autosave-desktop-name)
+      (progn
+	(message "Cannot delete the current desktop-autosave session. Please use desktop-autosave-stop first.")
+	nil)
+    (let ((full-desktop-path (desktop-autosave-get-directory-for-desktop name)))
+      (if (yes-or-no-p (format "Really delete desktop directory %s? " full-desktop-path))
+	  (condition-case nil
+	      (progn
+		(delete-directory full-desktop-path t)
+		(message "Deleted %s" full-desktop-path)
+		t)
+	    (error (progn
+		     (message "Error: could not delete %s" full-desktop-path)
+		     nil)))
+	nil))))
+	  
 
 (defun desktop-autosave-start (&optional desktop-name force-proceed)
   "Starts desktop-autosave. If desktop-name is not provided, it is requested.
@@ -284,20 +366,22 @@
 	  (not (string= (desktop-autosave-currently-saving)
 			desktop-name)))
 	  (progn
-	    (if (desktop-autosave-currently-saving)
-		(desktop-autosave-stop-automatic-saves))
-	    (message "--Repository: %s\n--Name: %s" desktop-autosave-desktop-repository desktop-name)
-	    (desktop-autosave-set-location  desktop-autosave-desktop-repository desktop-name)
-	    (message "Autosave location: %s" desktop-autosave-directory-name)
+	    (desktop-autosave-stop)
+	    (desktop-autosave-set-location  desktop-name)
+	    (desktop-autosave-dbg "Autosave location: %s" desktop-autosave-directory-name)
 	    (if (desktop-autosave-load-desktop force-proceed)
 		(desktop-autosave-do-saves-automatically)))))
 
-(defun desktop-autosave-stop (&optional save)
-  "Stops desktop-autosave."
+(defun desktop-autosave-stop (&optional dont-save)
+  "Stops desktop-autosave. If desktop-autosave is not on, this is
+a no-op. Otherwise, saves the desktop one last time unless
+dont-save is non-nil."
   (interactive)
-  (if save
-      (desktop-autosave-save-desktop))
-  (desktop-autosave-stop-automatic-saves))
+  (if (desktop-autosave-currently-saving)
+      (progn
+	(if (not dont-save)
+	    (desktop-autosave-save-desktop))
+	(desktop-autosave-stop-automatic-saves))))
 
 
 (prefer-coding-system 'utf-8)
