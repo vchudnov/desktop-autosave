@@ -1,5 +1,6 @@
-desktop-auto-save  An emacs package to automatically save desktop sessions
+desktop-autosave  An emacs package to automatically save desktop sessions
 Copyright 2010 Victor Chudnovsky
+Author: victor.chudnovsky+desktop-autosave@gmail.com
 
 Description:
 
@@ -24,6 +25,7 @@ Main e-lisp functions:
  (desktop-autosave-show)
  (desktop-autosave-delete-desktop (&optional name)
 
+Installation:
 You probably want to include this functionality in your ~/.emacs as follows:
  (setq load-path (cons "<path to this file>" load-path))
  (require 'desktop-autosave)

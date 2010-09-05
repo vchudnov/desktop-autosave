@@ -40,6 +40,7 @@
 ;;  (desktop-autosave-show)
 ;;  (desktop-autosave-delete-desktop (&optional name)
 ;;
+;; Installation:
 ;; You probably want to include this functionality in your ~/.emacs as follows:
 ;;  (setq load-path (cons "<path to this file>" load-path))
 ;;  (require 'desktop-autosave)
