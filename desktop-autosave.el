@@ -26,6 +26,8 @@
 ;; Usage:
 ;;  Starting desktop-autosave:
 ;;    M-x desktop-autosave-start RET <desktop name>
+;;  Showing the session currently being saved:
+;;    M-x desktop-autosave-current-session RET
 ;;  Stopping desktop-autosave:
 ;;    M-x desktop-autosave-stop
 ;;  Showing previously-saved desktops:
@@ -35,6 +37,7 @@
 ;;
 ;; Main e-lisp functions:
 ;;  (desktop-autosave-start (&optional desktop-name force-proceed)
+;;  (desktop-autosave-current-session)
 ;;  (desktop-autosave-stop &optional save)
 ;;  (desktop-autosave-currently-saving)
 ;;  (desktop-autosave-show)
@@ -317,6 +320,14 @@
    (let ((result ""))
      (dolist (desktop (desktop-autosave-get-session-names) result)
        (setq result (concat result desktop " "))))))
+
+(defun desktop-autosave-current-session ()
+  "Displays a message with the session currently being saved, if any."
+  (interactive)
+  (let ((name (desktop-autosave-currently-saving)))
+    (if name
+	(message  "Currently saving session %s in %s" name desktop-autosave-directory-name)
+      (message "Not currently saving a session"))))
 
 (defun desktop-autosave-delete-desktop (&optional name)
   "Deletes the desktop directory <name>. If <name> is nil or not
