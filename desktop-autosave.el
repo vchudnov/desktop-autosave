@@ -105,7 +105,7 @@
 
 ;; Debugging
 
-(defvar desktop-autosave-debug-mode t
+(defvar desktop-autosave-debug-mode nil
   "Debug mode for desktop-autosave")
 
 (defun desktop-autosave-dbg (&rest args)
