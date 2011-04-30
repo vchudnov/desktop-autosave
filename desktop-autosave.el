@@ -56,7 +56,7 @@
 ;; Configuration:
 ;;   EMACS_DESKTOP_REPOSITORY Environment variable that, if present and
 ;;   not empty, determines the directory where the desktops are saved. If
-;;   not present, defaults to /home/$USER/.emacs.d/desktop-sessions
+;;   not present, defaults to $HOME/.emacs.d/desktop-sessions
 ;;
 ;; The code below is based loosely on Joseph Brenner's "Desktop
 ;; Recover" package (http://www.emacswiki.org/emacs/DesktopRecover).
@@ -80,7 +80,7 @@
     (if (and repository-from-env
 	     (> (length repository-from-env) 0))
 	repository-from-env
-      (format "/home/%s/.emacs.d/desktop-sessions" (user-login-name))))
+      (expand-file-name "$HOME/.emacs.d/desktop-sessions")))
   "Repository (directory) where the desktop session directories
   are saved")
 
