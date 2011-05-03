@@ -41,7 +41,7 @@ suggestions.
 Configuration:
   EMACS_DESKTOP_REPOSITORY Environment variable that, if present and
   not empty, determines the directory where the desktops are saved. If
-  not present, defaults to /home/$USER/.emacs.d/desktop-sessions
+  not present, defaults to $HOME/.emacs.d/desktop-sessions
 
 The code below is based loosely on Joseph Brenner's "Desktop
 Recover" package (http://www.emacswiki.org/emacs/DesktopRecover).
