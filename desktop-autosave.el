@@ -194,6 +194,46 @@
       (let ((file (desktop-full-lock-name desktop-autosave-directory-name)))
 	(when (file-exists-p file) (delete-file file))))))
 
+
+;;; Shell mode hooks for the desktop package
+
+(defun desktop-autosave-save-shell-mode (desktop-dirname)
+ "Stores extra info for shell-mode buffers to be saved in the
+desktop file, and clears the modified indicator on the status
+line of each shell-mode buffer."
+ (progn
+   (set-buffer-modified-p nil)
+   (list default-directory comint-input-ring (buffer-string))))
+
+(defun desktop-autosave-restore-shell-mode (desktop-buffer-file-name
+					    desktop-buffer-name
+					    desktop-buffer-misc)
+ "Restores a shell-mode buffer's state from the desktop file."
+ (let ((dir (nth 0 desktop-buffer-misc))
+       (ring (nth 1 desktop-buffer-misc))
+       (contents (nth 2 desktop-buffer-misc)))
+   (when desktop-buffer-name
+     (set-buffer (get-buffer-create desktop-buffer-name))
+     (when contents
+       (insert contents)
+       (insert "\n\n# ---- [Buffer \"" desktop-buffer-name "\" restored on "
+	       (shell-command-to-string "echo -n `date`") "] ---- #\n\n"))
+     (when dir
+       (setq default-directory dir))
+     (shell desktop-buffer-name)
+     (when ring
+       (setq comint-input-ring ring))
+     (current-buffer))))
+
+(defun desktop-autosave-set-save-shell-mode-buffer ()
+ "Sets up a shell buffer to have its state saved in the desktop file."
+ (set (make-local-variable 'desktop-save-buffer) 'desktop-autosave-save-shell-mode))
+
+(add-to-list 'desktop-buffer-mode-handlers
+            '(shell-mode . desktop-autosave-restore-shell-mode))
+(add-hook 'shell-mode-hook 'desktop-autosave-set-save-shell-mode-buffer)
+
+
 ;;; Helper functions for managing desktop-autosave operation
 
 (defun desktop-autosave-fixdir (location &optional root)
