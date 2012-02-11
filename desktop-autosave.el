@@ -61,6 +61,9 @@
 ;; The code below is based loosely on Joseph Brenner's "Desktop
 ;; Recover" package (http://www.emacswiki.org/emacs/DesktopRecover).
 ;;
+;; The code below for saving shell-mode buffer state is based on code
+;; by Luke Blanshard (leadpipe@google.com).
+;;
 ;; Known issues:
 ;; * Saving on the desktop when exiting emacs leads to an infinite loop
 ;;   and is currently disabled. This should not affect the effectiveness
@@ -89,6 +92,10 @@
 
 (defvar desktop-autosave-save-period 1
   "Number of autosaves before an autosave-triggered desktop save occurs")
+
+(defvar desktop-autosave-idle-interval 300
+  "Number of seconds of idleness after which desktop-autosave
+  should trigger again")
 
 (defvar desktop-autosave-merge-desktop nil
   "Whether to merge the recovered desktop into the currently
@@ -124,13 +131,15 @@
   (add-hook 'find-file-hook 'desktop-autosave-save-desktop)
   (add-hook 'kill-emacs-hook 'desktop-autosave-clean-up-for-exit)
   ; TODO(vchudnov): This causes an infinite loop:
-  ;  (add-hook 'kill-buffer-hook 'desktop-autosave-handle-kill-file)
+  ; (add-hook 'kill-buffer-hook 'desktop-autosave-handle-kill-file)
   (desktop-autosave-save-desktop)
-  )
+  (setq desktop-autosave-idle-timer
+	(run-with-idle-timer desktop-autosave-idle-interval t 'desktop-autosave-save-desktop)))
 
 (defun desktop-autosave-stop-automatic-saves ()
   "Stops the desktop from being saved automatically via various event hooks."
   (message "Stopping desktop-autosave for %s" desktop-autosave-directory-name)
+  (cancel-timer desktop-autosave-idle-timer)
   (custom-set-variables '(desktop-save nil))
   (desktop-autosave-release-lock)
   (desktop-autosave-clear-location)
