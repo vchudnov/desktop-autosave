@@ -20,8 +20,10 @@
 ;; Description:
 ;;
 ;; This emacs package will cause the emacs desktop session to be saved
-;; to file periodically (when emacs autosaves) as well as whenever
-;; significant events occur such as opening or saving a file.
+;; to file periodically (when emacs autosaves; after a set amount of
+;; idle time; after a set amount of time since a shell-mode buffer
+;; became dirty) as well as whenever significant events occur such as
+;; opening or saving a file.
 ;;
 ;; Usage:
 ;;  Starting desktop-autosave:
@@ -97,6 +99,10 @@
   "Number of seconds of idleness after which desktop-autosave
   should trigger again")
 
+(defvar desktop-autosave-dirty-shell-mode-interval 60
+  "Number of seconds after any shell-mode buffer becomes dirty
+  that the desktop should be saved again.")
+
 (defvar desktop-autosave-merge-desktop nil
   "Whether to merge the recovered desktop into the currently
   opened desktop (not needed if you start desktop-autosave
@@ -109,6 +115,9 @@
 
 (defvar desktop-autosave-desktop-name-hist (list desktop-autosave-desktop-name)
   "Desktop session name history")
+
+(defvar desktop-autosave-dirty-shell-mode-timer nil
+  "Timer for saving dirty shell-mode buffers")
 
 ;; Debugging
 
@@ -151,15 +160,24 @@
   ;  (remove-hook 'kill-buffer-hook 'desktop-autosave-handle-kill-file)
   )
 
-(defun desktop-autosave-save-desktop ()
-  "Saves the desktop."
-  (let ((location
-	 (desktop-autosave-sync-params)))
-    (desktop-autosave-release-lock)
-    (desktop-remove)
-    (desktop-save location)
-    (custom-set-variables '(desktop-save t))
-    (message "Saved desktop in %s" location)))
+(defun desktop-autosave-save-desktop (&optional trigger)
+  "Saves the desktop. If trigger is provided, informs what triggers the save."
+
+  ; Need this safeguard in case desktop-autosave has been turned off
+  ; but there's a previously-set timer that fired.
+  (if (desktop-autosave-currently-saving)
+    (let ((location
+	   (desktop-autosave-sync-params)))
+      (desktop-autosave-release-lock)
+      (desktop-remove)
+      (desktop-save location)
+      (custom-set-variables '(desktop-save t))
+      (desktop-autosave-cancel-timer)
+      (message "Saved desktop in %s %s" location
+	       (if trigger
+		   (concat " [trigger: " trigger " ]")
+		 "")))
+    (message "desktop-autosave: NOT saving.")))
 
 (defun desktop-autosave-clean-up-for-exit ()
   "For doing a 'clean' exit.
@@ -210,7 +228,7 @@
  "Stores extra info for shell-mode buffers to be saved in the
 desktop file, and clears the modified indicator on the status
 line of each shell-mode buffer."
- (progn
+ (when (desktop-autosave-currently-saving)
    (set-buffer-modified-p nil)
    (list default-directory comint-input-ring (buffer-string))))
 
@@ -234,14 +252,24 @@ line of each shell-mode buffer."
        (setq comint-input-ring ring))
      (current-buffer))))
 
+(defun desktop-autosave-dirty-shell-mode-set-to-save ()
+  "Sets a time to save the desktop now that one of the shell-mode buffers has become dirty."
+  (if (and (desktop-autosave-currently-saving)
+	   (not desktop-autosave-dirty-shell-mode-timer))
+	(setq desktop-autosave-dirty-shell-mode-timer
+	      (run-at-time desktop-autosave-dirty-shell-mode-interval nil 
+			   'desktop-autosave-save-desktop (buffer-name)))))
+
+(defun desktop-autosave-cancel-timer ()
+  "Cancels all desktop timers."
+  (when desktop-autosave-dirty-shell-mode-timer
+	(cancel-timer desktop-autosave-dirty-shell-mode-timer)
+	(setq desktop-autosave-dirty-shell-mode-timer nil)))
+
 (defun desktop-autosave-set-save-shell-mode-buffer ()
  "Sets up a shell buffer to have its state saved in the desktop file."
- (set (make-local-variable 'desktop-save-buffer) 'desktop-autosave-save-shell-mode))
-
-(add-to-list 'desktop-buffer-mode-handlers
-            '(shell-mode . desktop-autosave-restore-shell-mode))
-(add-hook 'shell-mode-hook 'desktop-autosave-set-save-shell-mode-buffer)
-
+ (set (make-local-variable 'desktop-save-buffer) 'desktop-autosave-save-shell-mode)
+ (set (make-local-variable 'first-change-hook) 'desktop-autosave-dirty-shell-mode-set-to-save))
 
 ;;; Helper functions for managing desktop-autosave operation
 
@@ -430,6 +458,9 @@ performed, or nil otherwise."
 	    (desktop-autosave-stop)
 	    (desktop-autosave-set-location  desktop-name)
 	    (desktop-autosave-dbg "Autosave location: %s" desktop-autosave-directory-name)
+	    (add-hook 'shell-mode-hook 'desktop-autosave-set-save-shell-mode-buffer)
+	    (add-to-list 'desktop-buffer-mode-handlers
+			 '(shell-mode . desktop-autosave-restore-shell-mode))
 	    (if (desktop-autosave-load-desktop force-proceed)
 		(desktop-autosave-do-saves-automatically)))))
 
@@ -440,6 +471,10 @@ dont-save is non-nil."
   (interactive)
   (if (desktop-autosave-currently-saving)
       (progn
+	(delete '(shell-mode . desktop-autosave-restore-shell-mode)
+		'desktop-buffer-mode-handlers)
+	(remove-hook 'shell-mode-hook 'desktop-autosave-set-save-shell-mode-buffer)
+	(desktop-autosave-cancel-timer)
 	(if (not dont-save)
 	    (desktop-autosave-save-desktop))
 	(desktop-autosave-stop-automatic-saves))))
