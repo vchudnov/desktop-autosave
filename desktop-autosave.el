@@ -127,7 +127,9 @@
 (defun desktop-autosave-dbg (&rest args)
   "Prints args if desktop-autosave is in debug mode."
   (if desktop-autosave-debug-mode
-      (apply 'message args)))
+      (progn
+	(apply 'message args)
+	t))
 
 ;;;  The various autosave hooks
 
@@ -141,9 +143,10 @@
   (add-hook 'kill-emacs-hook 'desktop-autosave-clean-up-for-exit)
   ; TODO(vchudnov): This causes an infinite loop:
   ; (add-hook 'kill-buffer-hook 'desktop-autosave-handle-kill-file)
-  (desktop-autosave-save-desktop)
+  (desktop-autosave-save-desktop "desktop-autosave-do-saves-automatically")
   (setq desktop-autosave-idle-timer
-	(run-with-idle-timer desktop-autosave-idle-interval t 'desktop-autosave-save-desktop)))
+	(run-with-idle-timer desktop-autosave-idle-interval t
+			     'desktop-autosave-save-desktop "idle")))
 
 (defun desktop-autosave-stop-automatic-saves ()
   "Stops the desktop from being saved automatically via various event hooks."
@@ -173,10 +176,14 @@
       (desktop-save location)
       (custom-set-variables '(desktop-save t))
       (desktop-autosave-cancel-timer)
-      (message "Saved desktop in %s %s" location
-	       (if trigger
-		   (concat " [trigger: " trigger " ]")
-		 "")))
+      (if (not (desktop-autosave-dbg "Saved desktop at %s in %s %s"
+				     (current-time-string)
+				     location
+				     (if trigger
+					 (concat " [trigger: " trigger " ]")
+				       "")))
+	  (message "desktop-autosave: Saved desktop in %s"
+		   location)))
     (message "desktop-autosave: NOT saving.")))
 
 (defun desktop-autosave-clean-up-for-exit ()
@@ -191,9 +198,10 @@
    `desktop-autosave-save-period'."
   (cond ((>= desktop-autosave-auto-save-count desktop-autosave-save-period)
          (setq desktop-autosave-auto-save-count 1)
-         (desktop-autosave-save-desktop))
+         (desktop-autosave-save-desktop "autosave"))
         (t
-         (setq desktop-autosave-auto-save-count (+ 1 desktop-autosave-auto-save-count)))))
+         (setq desktop-autosave-auto-save-count
+	       (+ 1 desktop-autosave-auto-save-count)))))
 
 ; TODO(vchudnov): This leads to an infinite loop! Figure out why
 (defun desktop-autosave-handle-kill-file ()
@@ -208,7 +216,8 @@
   "Makes sure the desktop package knows about the desktop
    directory name for desktop-save. Returns this directory name."
   (let ((location
-	 (file-name-as-directory (expand-file-name desktop-autosave-directory-name))))
+	 (file-name-as-directory
+	  (expand-file-name desktop-autosave-directory-name))))
     (setq desktop-dirname location)
     location))
 
@@ -253,7 +262,7 @@ line of each shell-mode buffer."
      (current-buffer))))
 
 (defun desktop-autosave-dirty-shell-mode-set-to-save ()
-  "Sets a time to save the desktop now that one of the shell-mode buffers has become dirty."
+  "Schedules a desktop save since a shell-mode buffer has become dirty."
   (if (and (desktop-autosave-currently-saving)
 	   (not desktop-autosave-dirty-shell-mode-timer))
 	(setq desktop-autosave-dirty-shell-mode-timer
@@ -268,8 +277,10 @@ line of each shell-mode buffer."
 
 (defun desktop-autosave-set-save-shell-mode-buffer ()
  "Sets up a shell buffer to have its state saved in the desktop file."
- (set (make-local-variable 'desktop-save-buffer) 'desktop-autosave-save-shell-mode)
- (set (make-local-variable 'first-change-hook) 'desktop-autosave-dirty-shell-mode-set-to-save))
+ (set (make-local-variable 'desktop-save-buffer)
+      'desktop-autosave-save-shell-mode)
+ (set (make-local-variable 'first-change-hook)
+      'desktop-autosave-dirty-shell-mode-set-to-save))
 
 ;;; Helper functions for managing desktop-autosave operation
 
@@ -347,15 +358,18 @@ line of each shell-mode buffer."
   chose to cancel a confirmation prompt)."
   (desktop-autosave-dbg "In desktop-autosave-load-desktop")
   (let ((desktop-exists
-	 (file-exists-p (desktop-full-file-name desktop-autosave-directory-name)))
+	 (file-exists-p
+	  (desktop-full-file-name desktop-autosave-directory-name)))
 	(lock-exists
-	 (file-exists-p (desktop-full-lock-name desktop-autosave-directory-name)))
+	 (file-exists-p
+	  (desktop-full-lock-name desktop-autosave-directory-name)))
 	(proceed t))
     (if desktop-exists
 	(if (or force-proceed
 		(if lock-exists
 		    (yes-or-no-p
-		     "Desktop is locked, due to either being in use or a crashed session. Continue? ")
+		     (concat "Desktop is locked, due to either being in use "
+			     "or a crashed session. Continue? "))
 		  (y-or-n-p "Recover previously saved desktop? ")))
 	    (progn
 	      (if (not desktop-autosave-merge-desktop)
@@ -373,16 +387,19 @@ line of each shell-mode buffer."
 
 (defun desktop-autosave-get-session-names (&optional name-prefix)
   "Returns a list of all the desktops whose names start with name-prefix."
-  (let ((name-match-expr (concat desktop-autosave-desktop-repository "/" name-prefix "*")))
+  (let ((name-match-expr (concat desktop-autosave-desktop-repository
+				 "/" name-prefix "*")))
     (condition-case nil
 	(let* ((suffix  "/.emacs.desktop")
 	       (all-desktops (file-expand-wildcards
 			      (concat name-match-expr suffix)))
-	       (prefix-length (+ 1 (length desktop-autosave-desktop-repository)))
+	       (prefix-length
+		(+ 1 (length desktop-autosave-desktop-repository)))
 	       (suffix-length (length suffix))
 	       (result nil))
 	  (dolist (desktop all-desktops result)
-	    (setq result (cons (substring desktop prefix-length (- (length desktop) suffix-length))
+	    (setq result (cons (substring desktop prefix-length
+					  (- (length desktop) suffix-length))
 			       result))))
       (error (progn
 	       (message "No desktops found matching %s" name-match-expr)
@@ -403,7 +420,8 @@ line of each shell-mode buffer."
   (interactive)
   (let ((name (desktop-autosave-currently-saving)))
     (if name
-	(message  "Currently saving session %s in %s" name desktop-autosave-directory-name)
+	(message  "Currently saving session %s in %s"
+		  name desktop-autosave-directory-name)
       (message "Not currently saving a session"))))
 
 (defun desktop-autosave-delete-desktop (&optional name)
@@ -415,13 +433,16 @@ performed, or nil otherwise."
   (interactive)
   (if (not name)
       (setq name
-	    (completing-read "Desktop to delete: " (desktop-autosave-get-session-names))))
+	    (completing-read "Desktop to delete: "
+			     (desktop-autosave-get-session-names))))
   (if (string= name desktop-autosave-desktop-name)
       (progn
-	(message "Cannot delete the current desktop-autosave session. Please use desktop-autosave-stop first.")
+	(message "Cannot delete the current desktop-autosave session. "
+		 "Please use desktop-autosave-stop first.")
 	nil)
     (let ((full-desktop-path (desktop-autosave-get-directory-for-desktop name)))
-      (if (yes-or-no-p (format "Really delete desktop directory %s? " full-desktop-path))
+      (if (yes-or-no-p (format "Really delete desktop directory %s? "
+			       full-desktop-path))
 	  (condition-case nil
 	      (progn
 		(delete-directory full-desktop-path t)
@@ -457,8 +478,10 @@ performed, or nil otherwise."
 	  (progn
 	    (desktop-autosave-stop)
 	    (desktop-autosave-set-location  desktop-name)
-	    (desktop-autosave-dbg "Autosave location: %s" desktop-autosave-directory-name)
-	    (add-hook 'shell-mode-hook 'desktop-autosave-set-save-shell-mode-buffer)
+	    (desktop-autosave-dbg "Autosave location: %s"
+				  desktop-autosave-directory-name)
+	    (add-hook 'shell-mode-hook
+		      'desktop-autosave-set-save-shell-mode-buffer)
 	    (add-to-list 'desktop-buffer-mode-handlers
 			 '(shell-mode . desktop-autosave-restore-shell-mode))
 	    (if (desktop-autosave-load-desktop force-proceed)
@@ -473,10 +496,11 @@ dont-save is non-nil."
       (progn
 	(delete '(shell-mode . desktop-autosave-restore-shell-mode)
 		'desktop-buffer-mode-handlers)
-	(remove-hook 'shell-mode-hook 'desktop-autosave-set-save-shell-mode-buffer)
+	(remove-hook 'shell-mode-hook
+		     'desktop-autosave-set-save-shell-mode-buffer)
 	(desktop-autosave-cancel-timer)
 	(if (not dont-save)
-	    (desktop-autosave-save-desktop))
+	    (desktop-autosave-save-desktop "desktop-autosave-stop"))
 	(desktop-autosave-stop-automatic-saves))))
 
 
