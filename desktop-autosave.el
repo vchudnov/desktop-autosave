@@ -129,7 +129,7 @@
   (if desktop-autosave-debug-mode
       (progn
 	(apply 'message args)
-	t))
+	t)))
 
 ;;;  The various autosave hooks
 
