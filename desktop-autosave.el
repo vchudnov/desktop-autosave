@@ -484,6 +484,7 @@ performed, or nil otherwise."
 		      'desktop-autosave-set-save-shell-mode-buffer)
 	    (add-to-list 'desktop-buffer-mode-handlers
 			 '(shell-mode . desktop-autosave-restore-shell-mode))
+	    (setq global-mode-string (format "[%s] " desktop-autosave-desktop-name))
 	    (if (desktop-autosave-load-desktop force-proceed)
 		(desktop-autosave-do-saves-automatically)))))
 
@@ -501,6 +502,7 @@ dont-save is non-nil."
 	(desktop-autosave-cancel-timer)
 	(if (not dont-save)
 	    (desktop-autosave-save-desktop "desktop-autosave-stop"))
+	(setq global-mode-string "")
 	(desktop-autosave-stop-automatic-saves))))
 
 
