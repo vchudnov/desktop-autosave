@@ -496,7 +496,7 @@ dont-save is non-nil."
   (if (desktop-autosave-currently-saving)
       (progn
 	(delete '(shell-mode . desktop-autosave-restore-shell-mode)
-		'desktop-buffer-mode-handlers)
+		desktop-buffer-mode-handlers)
 	(remove-hook 'shell-mode-hook
 		     'desktop-autosave-set-save-shell-mode-buffer)
 	(desktop-autosave-cancel-timer)
