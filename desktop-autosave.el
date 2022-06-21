@@ -484,7 +484,10 @@ performed, or nil otherwise."
 		      'desktop-autosave-set-save-shell-mode-buffer)
 	    (add-to-list 'desktop-buffer-mode-handlers
 			 '(shell-mode . desktop-autosave-restore-shell-mode))
-	    (setq global-mode-string (format "[%s] " desktop-autosave-desktop-name))
+	    (or global-mode-string (setq global-mode-string '("")))
+	    (let ((desktop-modeline-display (format "{%s} " desktop-autosave-desktop-name)))
+	      (setq global-mode-string (append global-mode-string `(,desktop-modeline-display))))
+	    (force-mode-line-update)
 	    (if (desktop-autosave-load-desktop force-proceed)
 		(desktop-autosave-do-saves-automatically)))))
 
